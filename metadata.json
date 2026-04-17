@@ -1,0 +1,6 @@
+{
+  "name": "ZATCA Audit Pro",
+  "description": "A premium VAT audit and expense tracker for the Saudi market.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}

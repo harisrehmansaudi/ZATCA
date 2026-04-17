@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email" },
+        "displayName": { "type": "string", "description": "User display name" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Receipt": {
+      "title": "Receipt",
+      "description": "Scanned ZATCA receipt data",
+      "type": "object",
+      "properties": {
+        "seller": { "type": "string" },
+        "vatNumber": { "type": "string" },
+        "total": { "type": "number" },
+        "vatAmount": { "type": "number" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["seller", "total", "vatAmount", "userId"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "receipts/{receiptId}": {
+      "schema": "Receipt",
+      "description": "User's scanned receipts"
+    }
+  }
+}
