@@ -13,104 +13,111 @@ export const Scanner = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
-import React, { useState, useEffect, useRef } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 
 export const Scanner = () => {
-    const [result, setResult] = useState<any>(null);
-    const [resultVisible, setResultVisible] = useState(false);
-    const [isScanning, setIsScanning] = useState(false);
+    const [status, setStatus] = useState<'idle' | 'loading' | 'active' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
-    const scannerRef = useRef<Html5Qrcode | null>(null);
+    const [result, setResult] = useState<any>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    const decodeZatca = (base64String: string) => {
-        try {
-            let bytes: Uint8Array;
-            try {
-                bytes = Uint8Array.from(atob(base64String), c => c.charCodeAt(0));
-            } catch (e) { return null; }
-            let i = 0;
-            const result: any = {};
-            while (i < bytes.length) {
-                const tag = bytes[i++];
-                const len = bytes[i++];
-                const valBytes = bytes.slice(i, i + len);
-                const val = new TextDecoder().decode(valBytes);
-                if (tag === 1) result.merchant = val;
-                if (tag === 2) result.vat_id = val;
-                if (tag === 4) result.total = parseFloat(val);
-                i += len;
-            }
-            return result;
-        } catch (e) { return null; }
-    };
-
-    const stopScanner = async () => {
-        if (scannerRef.current) {
-            await scannerRef.current.stop();
-            await scannerRef.current.clear();
-            scannerRef.current = null;
-        }
-        setIsScanning(false);
-    };
-
-    const startScanner = () => {
+    const startStream = async () => {
+        setStatus('loading');
         setErrorMsg('');
-        setTimeout(() => {
-            scannerRef.current = new Html5Qrcode("reader");
-            scannerRef.current.start(
-                { facingMode: "environment" },
-                {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 },
-                    useBarCodeDetectorIfSupported: false, // Required for Samsung stability
-                },
-                (decodedText) => {
-                    if (navigator.vibrate) navigator.vibrate(200);
-                    setResult(decodeZatca(decodedText));
-                    setResultVisible(true);
-                    stopScanner();
-                },
-                (err) => { console.log(err); }
-            ).then(() => setIsScanning(true)).catch(err => {
-                setErrorMsg(err.toString());
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: { exact: 'environment' } } 
             });
-        }, 500);
+            const video = videoRef.current;
+            if (video) {
+                video.srcObject = stream;
+                await video.play();
+                setStatus('active');
+            }
+        } catch (err: any) {
+            setErrorMsg(err.name + ': ' + err.message);
+            setStatus('error');
+        }
     };
 
-    useEffect(() => {
-        return () => {
-            stopScanner();
-        };
-    }, []);
+    const takeSnapshot = async () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas) return;
+
+        setStatus('loading');
+        
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg');
+            
+            // Gemini Handoff
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+                const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                const base64Data = dataUrl.split(',')[1];
+                
+                const response = await model.generateContent({
+                    contents: [{
+                        role: "user",
+                        parts: [{
+                            inlineData: { data: base64Data, mimeType: "image/jpeg" }
+                        }, {
+                            text: "Extract merchant name, VAT ID, and total amount from this receipt image. Format as JSON."
+                        }]
+                    }]
+                });
+                
+                const text = response.text();
+                // Simple parser assumption for simplicity
+                setResult({ analysis: text }); 
+                setStatus('active');
+            } catch (err: any) {
+                setErrorMsg('OCR Error: ' + err.message);
+                setStatus('error');
+            }
+        }
+    };
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-6 text-white">
+        <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center">
             <div className="absolute top-8 left-6 z-[1001]">
                 <Link to="/" className="p-3 bg-white/10 backdrop-blur-md rounded-full text-white block"><ArrowLeft size={24} /></Link>
             </div>
 
-            {!isScanning && (
-                <button onClick={startScanner} className="bg-emerald text-black px-8 py-4 rounded-full font-bold text-lg animate-pulse">
-                    ACTIVATE SCANNER
-                </button>
+            {errorMsg && (
+                <div className="p-4 bg-red-900/50 text-red-500 font-bold text-lg text-center z-50 mb-4 uppercase">
+                    {errorMsg}
+                </div>
             )}
 
-            {errorMsg && <p className="text-red-500 font-bold mb-4">{errorMsg}</p>}
+            <div className="flex flex-col gap-4">
+                <button onClick={startStream} className="bg-emerald text-black px-8 py-4 rounded-full font-bold text-lg">
+                    FORCE ACTIVATE CAMERA
+                </button>
+                <button onClick={takeSnapshot} className="bg-blue-600 text-white px-8 py-4 rounded-full font-bold text-lg">
+                    Take Snapshot (OCR)
+                </button>
+            </div>
 
-            <div id="reader" className="w-full max-w-[500px]" style={{ display: isScanning ? 'block' : 'none' }}></div>
+            <video 
+                id="raw-video"
+                ref={videoRef} 
+                autoPlay muted playsInline 
+                style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'fixed', top: 0, left: 0, zIndex: -1 }} 
+            />
+            <canvas ref={canvasRef} className="hidden" width="640" height="480" />
             
-            {resultVisible && result && (
+            {result && (
                 <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-0 left-0 right-0 p-8 bg-slate-900/95 backdrop-blur-2xl border-t border-emerald/50 rounded-t-3xl z-[1002] text-white">
-                    <h2 className="text-xl font-bold mb-4">ZATCA Scanned Result</h2>
-                    <div className="space-y-2 text-sm text-gray-300">
-                        <p>Merchant: {result.merchant}</p>
-                        <p>VAT ID: {result.vat_id}</p>
-                        <p>Total: {result.total} SAR</p>
-                    </div>
+                    <h2 className="text-xl font-bold mb-4">Snapshot Result</h2>
+                    <pre className="text-xs text-gray-300">{JSON.stringify(result.analysis, null, 2)}</pre>
                 </motion.div>
             )}
         </div>
