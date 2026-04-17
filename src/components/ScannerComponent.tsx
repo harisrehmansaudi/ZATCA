@@ -19,107 +19,103 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
+import React, { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, Camera, RefreshCw } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
+
 export const Scanner = () => {
-    const [status, setStatus] = useState<'idle' | 'loading' | 'active' | 'error'>('idle');
-    const [errorMsg, setErrorMsg] = useState('');
     const [result, setResult] = useState<any>(null);
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [processing, setProcessing] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    const handleCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
 
-    const startStream = async () => {
-        setStatus('loading');
+        setProcessing(true);
         setErrorMsg('');
+        setResult(null);
+
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: { exact: 'environment' } } 
+            const base64Image = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(file);
             });
-            const video = videoRef.current;
-            if (video) {
-                video.srcObject = stream;
-                await video.play();
-                setStatus('active');
-            }
-        } catch (err: any) {
-            setErrorMsg(err.name + ': ' + err.message);
-            setStatus('error');
-        }
-    };
 
-    const takeSnapshot = async () => {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (!video || !canvas) return;
-
-        setStatus('loading');
-        
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg');
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+            const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+            const base64Data = base64Image.split(',')[1];
             
-            // Gemini Handoff
-            try {
-                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-                const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
-                const base64Data = dataUrl.split(',')[1];
-                
-                const response = await model.generateContent({
-                    contents: [{
-                        role: "user",
-                        parts: [{
-                            inlineData: { data: base64Data, mimeType: "image/jpeg" }
-                        }, {
-                            text: "Extract merchant name, VAT ID, and total amount from this receipt image. Format as JSON."
-                        }]
+            const response = await model.generateContent({
+                contents: [{
+                    role: "user",
+                    parts: [{
+                        inlineData: { data: base64Data, mimeType: "image/jpeg" }
+                    }, {
+                        text: "Analyze this Saudi ZATCA invoice. Extract Merchant Name, VAT ID, Total Amount, and Date. If there is a QR code, decode the TLV data. Return ONLY valid JSON."
                     }]
-                });
-                
-                const text = response.text();
-                // Simple parser assumption for simplicity
-                setResult({ analysis: text }); 
-                setStatus('active');
-            } catch (err: any) {
-                setErrorMsg('OCR Error: ' + err.message);
-                setStatus('error');
-            }
+                }]
+            });
+            
+            const jsonText = response.text().replace(/```json\n?|\n?```/g, '');
+            const parsedResult = JSON.parse(jsonText);
+            setResult(parsedResult);
+            
+            // Save to history (localStorage interaction for persistence)
+            const history = JSON.parse(localStorage.getItem('scans') || '[]');
+            localStorage.setItem('scans', JSON.stringify([parsedResult, ...history]));
+            
+        } catch (err: any) {
+            setErrorMsg('Processing Error: ' + err.message);
+        } finally {
+            setProcessing(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center">
-            <div className="absolute top-8 left-6 z-[1001]">
-                <Link to="/" className="p-3 bg-white/10 backdrop-blur-md rounded-full text-white block"><ArrowLeft size={24} /></Link>
+        <div className="fixed inset-0 z-[9999] bg-slate-950 flex flex-col items-center justify-center p-6 text-white">
+            <div className="absolute top-8 left-6">
+                <Link to="/" className="p-3 bg-white/10 rounded-full text-white block"><ArrowLeft size={24} /></Link>
             </div>
 
-            {errorMsg && (
-                <div className="p-4 bg-red-900/50 text-red-500 font-bold text-lg text-center z-50 mb-4 uppercase">
-                    {errorMsg}
+            <input type="file" capture="environment" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleCapture} />
+
+            {processing ? (
+                <div className="flex flex-col items-center gap-6">
+                    <motion.div 
+                        animate={{ scale: [1, 1.2, 1] }} 
+                        transition={{ repeat: Infinity, duration: 1.5 }}
+                        className="w-32 h-32 rounded-full border-4 border-emerald flex items-center justify-center p-2"
+                    >
+                        <RefreshCw size={48} className="text-emerald animate-spin" />
+                    </motion.div>
+                    <p className="text-xl font-bold animate-pulse">Processing ZATCA Data...</p>
                 </div>
+            ) : (
+                <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center gap-4 bg-emerald/20 border-2 border-emerald p-10 rounded-3xl"
+                >
+                    <Camera size={64} className="text-emerald" />
+                    <span className="font-bold text-lg">Use Native Camera</span>
+                </button>
             )}
 
-            <div className="flex flex-col gap-4">
-                <button onClick={startStream} className="bg-emerald text-black px-8 py-4 rounded-full font-bold text-lg">
-                    FORCE ACTIVATE CAMERA
-                </button>
-                <button onClick={takeSnapshot} className="bg-blue-600 text-white px-8 py-4 rounded-full font-bold text-lg">
-                    Take Snapshot (OCR)
-                </button>
-            </div>
+            {errorMsg && <p className="mt-8 text-red-500 font-bold">{errorMsg}</p>}
 
-            <video 
-                id="raw-video"
-                ref={videoRef} 
-                autoPlay muted playsInline 
-                style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'fixed', top: 0, left: 0, zIndex: -1 }} 
-            />
-            <canvas ref={canvasRef} className="hidden" width="640" height="480" />
-            
-            {result && (
-                <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-0 left-0 right-0 p-8 bg-slate-900/95 backdrop-blur-2xl border-t border-emerald/50 rounded-t-3xl z-[1002] text-white">
-                    <h2 className="text-xl font-bold mb-4">Snapshot Result</h2>
-                    <pre className="text-xs text-gray-300">{JSON.stringify(result.analysis, null, 2)}</pre>
-                </motion.div>
-            )}
+            <AnimatePresence>
+                {result && !processing && (
+                    <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="absolute bottom-0 left-0 right-0 p-8 bg-slate-900 backdrop-blur-2xl border-t border-emerald/50 rounded-t-3xl z-[1002]">
+                        <h2 className="text-xl font-bold mb-4">Scan Result</h2>
+                        <pre className="text-xs text-gray-300 overflow-auto max-h-60 bg-black p-4 rounded-xl">{JSON.stringify(result, null, 2)}</pre>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
