@@ -10,21 +10,25 @@ import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 
+import React, { useState, useEffect, useRef } from 'react';
+import jsQR from 'jsqr';
+import { motion } from 'motion/react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+
 export const Scanner = () => {
     const [result, setResult] = useState<any>(null);
     const [resultVisible, setResultVisible] = useState(false);
+    const [status, setStatus] = useState<'loading' | 'active' | 'error'>('loading');
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const frameIdx = useRef(0);
-
+    
     const decodeZatca = (base64String: string) => {
         try {
             let bytes: Uint8Array;
             try {
                 bytes = Uint8Array.from(atob(base64String), c => c.charCodeAt(0));
-            } catch (e) {
-                return null;
-            }
+            } catch (e) { return null; }
             let i = 0;
             const result: any = {};
             while (i < bytes.length) {
@@ -38,24 +42,31 @@ export const Scanner = () => {
                 i += len;
             }
             return result;
-        } catch (e) {
-            console.error('TLV Decode error:', e);
-            return null;
+        } catch (e) { return null; }
+    };
+
+    const startStream = async () => {
+        setStatus('loading');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.onloadedmetadata = () => {
+                    videoRef.current?.play();
+                    setStatus('active');
+                };
+            }
+        } catch (err) {
+            setStatus('error');
         }
     };
 
     useEffect(() => {
-        const startStream = async () => {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                videoRef.current.play();
-            }
-        };
         startStream();
 
+        let req: number;
         const loop = () => {
-            if (frameIdx.current++ % 15 === 0 && videoRef.current && canvasRef.current) {
+            if (videoRef.current && canvasRef.current && status === 'active') {
                 const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
                 if (ctx) {
                     ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -65,23 +76,35 @@ export const Scanner = () => {
                         if (navigator.vibrate) navigator.vibrate(200);
                         setResult(decodeZatca(code.data));
                         setResultVisible(true);
-                        // Stop stream? User said 'Auto-Scan' and 'moment QR detected, trigger success'.
+                        return;
                     }
                 }
             }
-            requestAnimationFrame(loop);
+            req = requestAnimationFrame(loop);
         };
-        const req = requestAnimationFrame(loop);
+        req = requestAnimationFrame(loop);
         
         return () => {
             cancelAnimationFrame(req);
             videoRef.current?.srcObject?.getTracks().forEach(t => t.stop());
         };
-    }, []);
+    }, [status]);
 
     return (
         <div className="fixed inset-0 z-[9999] bg-black">
-            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+            {status === 'loading' && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center text-emerald animate-pulse bg-black">
+                    Architect, we are initializing the lens...
+                </div>
+            )}
+            {status === 'error' && (
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center text-white bg-black p-6">
+                    <p className="mb-4 text-center">Camera failed to load.</p>
+                    <button onClick={startStream} className="bg-emerald text-black px-6 py-3 rounded-full font-bold">Start Scanner</button>
+                </div>
+            )}
+            
+            <video ref={videoRef} autoPlay muted playsInline loop className="w-full h-full object-cover" />
             <canvas ref={canvasRef} className="hidden" width="300" height="300" />
             
             <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
@@ -92,27 +115,21 @@ export const Scanner = () => {
                     <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald rounded-br-lg" />
                 </div>
             </div>
-            <div className="absolute top-1/2 mt-32 text-emerald font-bold animate-pulse text-center">Align QR Code Only / ضع الرمز هنا</div>
 
             <div className="absolute top-8 left-6 z-20">
                 <Link to="/" className="p-3 bg-white/10 backdrop-blur-md rounded-full text-white block"><ArrowLeft size={24} /></Link>
             </div>
             
-             {resultVisible && result && (
+            {resultVisible && result && (
                 <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-0 left-0 right-0 p-8 bg-slate-900/95 backdrop-blur-2xl border-t border-emerald/50 rounded-t-3xl z-40 text-white">
                     <h2 className="text-xl font-bold mb-4">ZATCA Scanned Result</h2>
                     <div className="space-y-2 text-sm text-gray-300">
                         <p>Merchant: {result.merchant}</p>
                         <p>VAT ID: {result.vat_id}</p>
                         <p>Total: {result.total} SAR</p>
-                        <p>VAT: {result.vat} SAR</p>
                     </div>
                 </motion.div>
             )}
-
-            <div className="absolute bottom-8 z-20">
-                <button className="bg-emerald text-black px-6 py-3 rounded-full font-bold">Upload from Gallery</button>
-            </div>
         </div>
     );
 };
