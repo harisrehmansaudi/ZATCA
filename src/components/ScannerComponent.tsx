@@ -1,24 +1,3 @@
-import React, { useState, useEffect, useRef } from 'react';
-import jsQR from 'jsqr';
-import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Upload } from 'lucide-react';
-
-export const Scanner = () => {
-    const [result, setResult] = useState<any>(null);
-    const [resultVisible, setResultVisible] = useState(false);
-    const [status, setStatus] = useState<'loading' | 'active' | 'error'>('loading');
-    const [errorMsg, setErrorMsg] = useState('');
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    
-import React, { useState, useRef } from 'react';
-import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
-
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
@@ -56,7 +35,7 @@ export const Scanner = () => {
                     parts: [{
                         inlineData: { data: base64Data, mimeType: "image/jpeg" }
                     }, {
-                        text: "Analyze this Saudi ZATCA invoice. Extract Merchant Name, VAT ID, Total Amount, and Date. If there is a QR code, decode the TLV data. Return ONLY valid JSON."
+                        text: "You are a Saudi Tax Expert. Extract Merchant, VAT Number, Total Amount (SAR), and Date. If a QR code is visible, prioritize decoding the ZATCA TLV data. Return ONLY a JSON object."
                     }]
                 }]
             });
@@ -65,12 +44,12 @@ export const Scanner = () => {
             const parsedResult = JSON.parse(jsonText);
             setResult(parsedResult);
             
-            // Save to history (localStorage interaction for persistence)
+            // Save to history
             const history = JSON.parse(localStorage.getItem('scans') || '[]');
             localStorage.setItem('scans', JSON.stringify([parsedResult, ...history]));
             
         } catch (err: any) {
-            setErrorMsg('Processing Error: ' + err.message);
+            setErrorMsg('Image too blurry, please snap again!');
         } finally {
             setProcessing(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -94,7 +73,7 @@ export const Scanner = () => {
                     >
                         <RefreshCw size={48} className="text-emerald animate-spin" />
                     </motion.div>
-                    <p className="text-xl font-bold animate-pulse">Processing ZATCA Data...</p>
+                    <p className="text-xl font-bold animate-pulse">ZATCA Pro is Analyzing...</p>
                 </div>
             ) : (
                 <button 
@@ -102,7 +81,7 @@ export const Scanner = () => {
                     className="flex flex-col items-center gap-4 bg-emerald/20 border-2 border-emerald p-10 rounded-3xl"
                 >
                     <Camera size={64} className="text-emerald" />
-                    <span className="font-bold text-lg">Use Native Camera</span>
+                    <span className="font-bold text-lg">Snap & Auto-Analyze</span>
                 </button>
             )}
 
