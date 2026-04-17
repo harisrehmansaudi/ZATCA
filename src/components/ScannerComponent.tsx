@@ -1,20 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-
-import React, { useState, useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-
-import React, { useState, useEffect, useRef } from 'react';
-import jsQR from 'jsqr';
-import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Upload } from 'lucide-react';
 
 export const Scanner = () => {
     const [result, setResult] = useState<any>(null);
@@ -22,6 +10,7 @@ export const Scanner = () => {
     const [status, setStatus] = useState<'loading' | 'active' | 'error'>('loading');
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const decodeZatca = (base64String: string) => {
         try {
@@ -47,8 +36,15 @@ export const Scanner = () => {
 
     const startStream = async () => {
         setStatus('loading');
+        const timeout = setTimeout(() => {
+            if (status === 'loading') setStatus('error');
+        }, 2000);
+
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
+            });
+            clearTimeout(timeout);
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
                 videoRef.current.onloadedmetadata = () => {
@@ -57,6 +53,7 @@ export const Scanner = () => {
                 };
             }
         } catch (err) {
+            clearTimeout(timeout);
             setStatus('error');
         }
     };
@@ -64,8 +61,7 @@ export const Scanner = () => {
     useEffect(() => {
         startStream();
 
-        let req: number;
-        const loop = () => {
+        const interval = setInterval(() => {
             if (videoRef.current && canvasRef.current && status === 'active') {
                 const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
                 if (ctx) {
@@ -76,16 +72,14 @@ export const Scanner = () => {
                         if (navigator.vibrate) navigator.vibrate(200);
                         setResult(decodeZatca(code.data));
                         setResultVisible(true);
-                        return;
+                        clearInterval(interval);
                     }
                 }
             }
-            req = requestAnimationFrame(loop);
-        };
-        req = requestAnimationFrame(loop);
+        }, 400);                
         
         return () => {
-            cancelAnimationFrame(req);
+            clearInterval(interval);
             videoRef.current?.srcObject?.getTracks().forEach(t => t.stop());
         };
     }, [status]);
@@ -97,18 +91,20 @@ export const Scanner = () => {
                     Architect, we are initializing the lens...
                 </div>
             )}
+            
             {status === 'error' && (
-                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center text-white bg-black p-6">
-                    <p className="mb-4 text-center">Camera failed to load.</p>
-                    <button onClick={startStream} className="bg-emerald text-black px-6 py-3 rounded-full font-bold">Start Scanner</button>
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center text-white bg-black p-6 gap-4">
+                    <p className="text-center">Camera failed to load.</p>
+                    <button onClick={startStream} className="bg-emerald text-black px-6 py-3 rounded-full font-bold">Retry Camera</button>
+                    <button onClick={() => fileInputRef.current?.click()} className="bg-white/10 text-white px-6 py-3 rounded-full font-bold">Upload from Gallery</button>
                 </div>
             )}
             
-            <video ref={videoRef} autoPlay muted playsInline loop className="w-full h-full object-cover" />
+            <video ref={videoRef} autoPlay muted playsInline loop style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             <canvas ref={canvasRef} className="hidden" width="300" height="300" />
             
             <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                <div className="w-[300px] h-[300px] border-2 border-emerald rounded-lg relative">
+                <div className="w-[250px] h-[250px] border-2 border-emerald rounded-lg relative">
                     <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald rounded-tl-lg" />
                     <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald rounded-tr-lg" />
                     <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald rounded-bl-lg" />
@@ -120,6 +116,8 @@ export const Scanner = () => {
                 <Link to="/" className="p-3 bg-white/10 backdrop-blur-md rounded-full text-white block"><ArrowLeft size={24} /></Link>
             </div>
             
+            <input type="file" ref={fileInputRef} accept="image/*" className="hidden" />
+
             {resultVisible && result && (
                 <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-0 left-0 right-0 p-8 bg-slate-900/95 backdrop-blur-2xl border-t border-emerald/50 rounded-t-3xl z-40 text-white">
                     <h2 className="text-xl font-bold mb-4">ZATCA Scanned Result</h2>
