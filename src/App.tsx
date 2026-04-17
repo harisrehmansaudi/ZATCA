@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import React, { useState, useEffect, createContext, useContext, ReactNode, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebase';
@@ -124,23 +124,18 @@ const NavItem = ({ icon, label, to }: { icon: React.ReactNode, label: string, to
 
 // Update BottomNav to trigger the scanner input directly
 const BottomNav = () => {
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const navigate = useNavigate();
     
     return (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-lg border-t border-border z-50 flex items-center justify-around px-4 pb-[env(safe-area-inset-bottom)] pt-3">
-            <input type="file" ref={fileInputRef} accept="image/*" capture="environment" className="hidden" 
-                onChange={(e) => e.target.files && window.dispatchEvent(new CustomEvent('scan-invoice', { detail: e.target.files[0] }))} />
-
             <Link to="/" className="text-emerald flex flex-col items-center"><LayoutDashboard size={24}/></Link>
             
             {/* Camera Pill */}
             <motion.div 
                 whileTap={{ scale: 0.9 }} 
-                animate={{ scale: [1, 1.05, 1] }} 
-                transition={{ repeat: Infinity, duration: 2 }}
                 className="relative -top-6"
             >
-                <button onClick={() => fileInputRef.current?.click()} className="text-white p-4 rounded-full bg-emerald shadow-lg shadow-emerald/20 block">
+                <button onClick={() => navigate('/scanner')} className="text-white p-4 rounded-full bg-emerald shadow-lg shadow-emerald/20 block">
                     <Camera size={28} />
                 </button>
             </motion.div>
@@ -176,38 +171,31 @@ const PageWrapper = ({ children }: { children: React.ReactNode }) => (
 const SettingsPage = ({ lang }: { lang: 'en' | 'ar' }) => {
     const { toggleLang } = useLanguage();
     const t = translations[lang];
+    const navigate = useNavigate();
+
     return (
-        <div className="min-h-screen bg-slate-900 p-6 text-white" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-            <Link to="/" className="flex items-center gap-2 mb-6 text-emerald"><ArrowLeft size={20} /> {t.back}</Link>
+        <div className="fixed inset-0 z-[100] bg-slate-950 p-6 text-white overflow-y-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+            <div className="flex justify-between items-center mb-10">
+                <h1 className="text-2xl font-bold">{t.settings}</h1>
+                <button onClick={() => navigate('/')} className="p-2 bg-white/10 rounded-full"><X size={24} /></button>
+            </div>
             
             <div className="flex flex-col items-center mb-10">
                 <div className="w-24 h-24 rounded-full border-4 border-emerald flex items-center justify-center mb-4 bg-slate-800"><User size={48} className="text-emerald"/></div>
-                <h1 className="text-2xl font-bold flex items-center gap-2">Architect <span className="bg-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-bold">PRO</span></h1>
+                <h1 className="text-xl font-bold flex items-center gap-2">Architect <span className="bg-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-bold">PRO</span></h1>
                 <p className="text-text-dim text-sm">harisrehmansaudi@gmail.com</p>
             </div>
             
             <div className="space-y-6">
                 <SettingsCard title={t.profile}>
-                   <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.editProfile}</button>
-                   <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.changePassword}</button>
-                   <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.notificationPrefs}</button>
-                </SettingsCard>
-                <SettingsCard title={t.zatcaFinance}>
-                   <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.savingsGoal}</button>
-                   <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.exportTax}</button>
-                   <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.vatDetails}</button>
-                </SettingsCard>
-                <SettingsCard title={t.appPrefs}>
-                   <button onClick={toggleLang} className="w-full text-left p-3 flex justify-between items-center hover:bg-white/5 rounded-xl">
-                       {t.language} <Languages size={18} />
-                   </button>
-                   <button className="w-full text-left p-3 flex justify-between items-center hover:bg-white/5 rounded-xl">
-                       {t.theme} <div className="w-4 h-4 bg-white rounded-full" />
-                   </button>
+                   <div className="space-y-1">
+                       <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.editProfile}</button>
+                       <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.changePassword}</button>
+                       <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.notificationPrefs}</button>
+                   </div>
                 </SettingsCard>
                 <div className="pt-6 border-t border-white/10 space-y-4">
                     <button className="w-full p-4 rounded-xl text-red-500 font-semibold hover:bg-red-500/10">{t.logout}</button>
-                    <button className="w-full p-4 rounded-xl text-red-700 font-semibold hover:bg-red-500/5">{t.deleteAccount}</button>
                 </div>
             </div>
         </div>
