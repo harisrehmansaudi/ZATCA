@@ -182,21 +182,26 @@ const SettingsPage = ({ lang }: { lang: 'en' | 'ar' }) => {
             
             <div className="flex flex-col items-center mb-10">
                 <div className="w-24 h-24 rounded-full border-4 border-emerald flex items-center justify-center mb-4 bg-slate-800"><User size={48} className="text-emerald"/></div>
-                <h1 className="text-xl font-bold flex items-center gap-2">Architect <span className="bg-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-bold">PRO</span></h1>
+                <h1 className="text-xl font-bold flex items-center gap-2">Architect</h1>
                 <p className="text-text-dim text-sm">harisrehmansaudi@gmail.com</p>
             </div>
             
             <div className="space-y-6">
                 <SettingsCard title={t.profile}>
-                   <div className="space-y-1">
+                   <div className="space-y-2">
                        <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.editProfile}</button>
                        <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.changePassword}</button>
                        <button className="w-full text-left p-3 hover:bg-white/5 rounded-xl">{t.notificationPrefs}</button>
                    </div>
                 </SettingsCard>
-                <div className="pt-6 border-t border-white/10 space-y-4">
-                    <button className="w-full p-4 rounded-xl text-red-500 font-semibold hover:bg-red-500/10">{t.logout}</button>
-                </div>
+
+                <SettingsCard title="Pro Subscription">
+                    <div className="p-3 text-sm text-emerald">You have reached Architect PRO level.</div>
+                </SettingsCard>
+            </div>
+
+            <div className="mt-12">
+                <button className="w-full p-4 rounded-2xl bg-red-500/10 text-red-500 font-semibold hover:bg-red-500/20">{t.logout}</button>
             </div>
         </div>
     );
