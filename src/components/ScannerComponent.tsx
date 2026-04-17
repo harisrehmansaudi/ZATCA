@@ -13,6 +13,21 @@ export const Scanner = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
+import React, { useState, useEffect, useRef } from 'react';
+import jsQR from 'jsqr';
+import { motion } from 'motion/react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, Upload } from 'lucide-react';
+
+export const Scanner = () => {
+    const [result, setResult] = useState<any>(null);
+    const [resultVisible, setResultVisible] = useState(false);
+    const [status, setStatus] = useState<'loading' | 'active' | 'error'>('loading');
+    const [errorMsg, setErrorMsg] = useState('');
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    
     const decodeZatca = (base64String: string) => {
         try {
             let bytes: Uint8Array;
@@ -35,32 +50,36 @@ export const Scanner = () => {
         } catch (e) { return null; }
     };
 
+    // Ghost animation: invisible 1px div that oscillates opacity
+    const GhostHeartbeat = () => (
+        <motion.div 
+            initial={{ opacity: 0.01 }}
+            animate={{ opacity: 0.02 }}
+            transition={{ repeat: Infinity, duration: 0.1, yoyo: Infinity }}
+            style={{ width: '1px', height: '1px', position: 'absolute', top: 0, left: 0, zIndex: 0 }}
+        />
+    );
+
     const startStream = async () => {
+        if(videoRef.current?.srcObject) {
+             (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        }
         setStatus('loading');
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
             });
             
-            // 300ms Delay to allow lens tech to init
             setTimeout(() => {
                 const video = videoRef.current;
                 if (video) {
                     video.srcObject = stream;
-                    // Explicit play command to force Android to render
-                    video.play().catch(e => console.error("Explicit play failed:", e));
-                    
-                    // GPU Wakeup Fallback using frame draw
-                    setTimeout(() => {
-                        if (video.videoWidth === 0 || video.videoHeight === 0) {
-                             canvasRef.current?.getContext('2d')?.drawImage(video, 0, 0);
-                        }
-                        setStatus('active');
-                    }, 500); 
+                    video.play().catch(e => console.error(e));
+                    setStatus('active');
                 }
             }, 300);
         } catch (err: any) {
-            setErrorMsg(err.message || 'Unknown Camera Error');
+            setErrorMsg(err.message || 'Camera Error');
             setStatus('error');
         }
     };
@@ -68,31 +87,39 @@ export const Scanner = () => {
     useEffect(() => {
         startStream();
 
-        const interval = setInterval(() => {
-            if (videoRef.current && canvasRef.current && status === 'active') {
-                const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
+        const canvas = canvasRef.current;
+        const video = videoRef.current;
+        
+        let req: number;
+        const renderLoop = () => {
+            if (canvas && video && status === 'active') {
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
                 if (ctx) {
-                    ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-                    const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     const code = jsQR(imageData.data, imageData.width, imageData.height);
-                    if (code) {
+                    if (code && !resultVisible) {
                         if (navigator.vibrate) navigator.vibrate(200);
                         setResult(decodeZatca(code.data));
                         setResultVisible(true);
-                        clearInterval(interval);
                     }
                 }
             }
-        }, 400);                
+            req = requestAnimationFrame(renderLoop);
+        };
+        req = requestAnimationFrame(renderLoop);
         
         return () => {
-            clearInterval(interval);
+            cancelAnimationFrame(req);
             videoRef.current?.srcObject?.getTracks().forEach((t: MediaStreamTrack) => t.stop());
         };
-    }, [status]);
+    }, [status, resultVisible]);
 
     return (
         <div className="fixed inset-0 z-[9999] bg-black">
+            <GhostHeartbeat />
+            
             {status === 'loading' && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center text-emerald animate-pulse bg-black">
                     Architect, we are initializing the lens...
@@ -101,7 +128,7 @@ export const Scanner = () => {
             
             {status === 'error' && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center text-white bg-black p-6 gap-4">
-                    <p className="text-center text-red-500 font-bold">Camera Error: {errorMsg}</p>
+                    <p className="text-center text-red-500 font-bold">Error: {errorMsg}</p>
                     <button onClick={startStream} className="bg-emerald text-black px-6 py-3 rounded-full font-bold">Retry Camera</button>
                     <button onClick={() => fileInputRef.current?.click()} className="bg-white/10 text-white px-6 py-3 rounded-full font-bold">Upload from Gallery</button>
                 </div>
@@ -109,13 +136,16 @@ export const Scanner = () => {
             
             <video 
                 ref={videoRef} 
-                autoPlay 
-                muted 
-                playsInline 
-                loop 
-                style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 999 }} 
+                autoPlay muted playsInline loop 
+                style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1 }} 
             />
-            <canvas ref={canvasRef} className="hidden" width="300" height="300" />
+            
+            <canvas 
+                ref={canvasRef} 
+                width="640" height="480" 
+                className="w-full h-full object-cover"
+                style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+            />
             
             <div className="absolute inset-0 z-[1000] flex items-center justify-center pointer-events-none">
                 <div className="w-[250px] h-[250px] border-2 border-emerald rounded-lg relative">
@@ -126,8 +156,9 @@ export const Scanner = () => {
                 </div>
             </div>
 
-            <div className="absolute top-8 left-6 z-[1001]">
+            <div className="absolute top-8 left-6 z-[1001] flex gap-4">
                 <Link to="/" className="p-3 bg-white/10 backdrop-blur-md rounded-full text-white block"><ArrowLeft size={24} /></Link>
+                <button onClick={startStream} className="p-3 bg-white/10 backdrop-blur-md rounded-full text-white">🔄</button>
             </div>
             
             <input type="file" ref={fileInputRef} accept="image/*" className="hidden" />
